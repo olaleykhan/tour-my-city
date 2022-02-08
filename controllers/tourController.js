@@ -6,57 +6,87 @@ const success = "success";
 exports.addTour = async (req, res) => {
 
   try {
-        const tour = await TourModel.create(req.body);
-        res.status(201).json({
-          status: 'success',
-          data: {
-            message: 'Tour was succesffully created',
-            tour,
-          },
-        });
-    
+    const tour = await TourModel.create(req.body);
+    res.status(201).json({
+      status: 'success',
+      data: {
+        message: 'Tour was succesffully created',
+        tour,
+      },
+    });
+
   } catch (err) {
     console.log(err);
-     res.status(404).json({
-       status: "failed",
-       message: "Data sent is invalid",
-       console: err,
-     });
-    
-  }  
+    res.status(404).json({
+      status: "failed",
+      message: "Data sent is invalid",
+      console: err,
+    });
+
+  }
 };
 
 
 // @params the query below is the  TourModel query method while queryString is the req.query that came from the request query parameters
 class APIFeatures {
-  constructor(query, queryString) {
-    this.query = query;
-    this.queryString = queryString;  
+  constructor(modelQuery, queryParams) {
+    this.modelQuery = modelQuery;
+    this.queryParams = queryParams;
   }
 
   filter() {
+    const excludeQueries = ['page', 'offset', 'limit', 'fields', 'sort'];
+    // copy the queries and save in params below
+    const queryObject = { ...this.queryParams };
+    // remnove keyworkds not meant for filtering
+    excludeQueries.forEach((query) => delete queryObject[query]);
+    // console.log(params);
+    let queryStr = JSON.stringify(queryObject);
+    // convert advanced filtering keywords to recognized keywords with regex
+    queryStr = queryStr.replace(
+      /\b(gt|gte|lt|lte|in)\b/g,
+      (match) => `$${match}`
+    );
+    //1b. filter by using the mongoose find query method.
+    // remember to store it in query and not call it directly so we can chain more query commands to it..
+    this.modelQuery(JSON.parse(queryStr));
 
-  const excludeQueries = ['page', 'offset', 'limit', 'fields', 'sort'];
-  // copy the queries and save in params below
-  const queryObject = { ...this.queryString };
-  // remnove keyworkds not meant for filtering
-  excludeQueries.forEach((query) => delete queryObject[query]);
-  // console.log(params);
-  let queryStr = JSON.stringify(queryObject);
-  // convert advanced filtering keywords to recognized keywords with regex
-  queryStr = queryStr.replace(
-    /\b(gt|gte|lt|lte|in)\b/g,
-    (match) => `$${match}`
-  );
-  //1b. filter by using the mongoose find query method.
-  // remember to store it in query and not call it directly so we can chain more query commands to it..
-    this.query.find(JSON.parse(queryStr));    
-    
     return this;
   }
 
-  
+  sort() {
+    if (queryParams.sort) {
+      const sortBy = queryParams.sort.split(',').join(' ');
+      this.modelQuery = this.modelQuery.sort(sortBy);
+    } else {
+      this.modelQuery = this.modelQuery.sort('-createdAt');
+    }
+    return this;
+  }
 
+  selectFields() {
+    if (queryParams.fields) {
+      const reqFields = queryParams.fields.split(',').join(' ');
+      console.log(reqFields);
+      this.modelQuery = this.modelQuery.select(reqFields);
+    } else {
+      this.modelQuery = this.modelQuery.select('-__V -imageCover');
+    }
+  }
+
+  paginate() {
+    if (queryParams.page) {
+      const limit = Number(queryParams.limit) || 2;
+      const offset = (Number(queryParams.page) - 1) * limit || 1;
+      // const numOfTours = await TourModel.countDocuments();
+      // if (numOfTours < offset || queryParams.page < 1) {
+      //   throw new Error(
+      //     'Invalid page number. ensure page is within total number of tours'
+      //   );
+      // }
+      this.modelQuery = this.modelQuery.skip(offset).limit(limit);
+    }
+  }
 }
 
 
@@ -85,43 +115,35 @@ exports.getAllTours = async (req, res) => {
 
   const features = new APIFeatures(TourModel.find(), req.query);
 
-  features.filter();
+  features.filter().sort().selectFields().paginate();
 
   // 2. add sorting to it. add it conditionally if there is sorting in the request params
 
-  if (req.query.sort) {
-    const sortBy = req.query.sort.split(',').join(' ');
-    query = query.sort(sortBy);
-  } else {
-    query = query.sort('-createdAt');
-  }
+  // if (req.query.sort) {
+  //   const sortBy = req.query.sort.split(',').join(' ');
+  //   query = query.sort(sortBy);
+  // } else {
+  //   query = query.sort('-createdAt');
+  // }
 
   // include or exclude certain fields from the request parameter
   // remember mongoose uses negative for inverse. adding - in front means you're trying to tghe the opposit
 
-  if (req.query.fields) {
-    const reqFields = req.query.fields.split(',').join(' ');
-    console.log(reqFields);
-    query = query.select(reqFields);
-  } else {
-    query = query.select('-__V -imageCover');
-  }
+  // if (req.query.fields) {
+  //   const reqFields = req.query.fields.split(',').join(' ');
+  //   console.log(reqFields);
+  //   query = query.select(reqFields);
+  // } else {
+  //   query = query.select('-__V -imageCover');
+  // }
+
+  // add pagination
+
 
   // call the actual query after they've all been chained
 
   try {
-    // add pagination
-    if (req.query.page) {
-      const limit = Number(req.query.limit) || 2;
-      const offset = (Number(req.query.page) - 1) * limit || 1;
-      const numOfTours = await TourModel.countDocuments();
-      if (numOfTours < offset || req.query.page < 1) {
-        throw new Error(
-          'Invalid page number. ensure page is within total number of tours'
-        );
-      }
-      query = query.skip(offset).limit(limit);
-    }
+
     const tours = await query;
     res.status(200).json({
       status: 'success',
