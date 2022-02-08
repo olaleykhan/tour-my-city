@@ -26,6 +26,40 @@ exports.addTour = async (req, res) => {
   }  
 };
 
+
+// @params the query below is the  TourModel query method while queryString is the req.query that came from the request query parameters
+class APIFeatures {
+  constructor(query, queryString) {
+    this.query = query;
+    this.queryString = queryString;  
+  }
+
+  filter() {
+
+  const excludeQueries = ['page', 'offset', 'limit', 'fields', 'sort'];
+  // copy the queries and save in params below
+  const queryObject = { ...this.queryString };
+  // remnove keyworkds not meant for filtering
+  excludeQueries.forEach((query) => delete queryObject[query]);
+  // console.log(params);
+  let queryStr = JSON.stringify(queryObject);
+  // convert advanced filtering keywords to recognized keywords with regex
+  queryStr = queryStr.replace(
+    /\b(gt|gte|lt|lte|in)\b/g,
+    (match) => `$${match}`
+  );
+  //1b. filter by using the mongoose find query method.
+  // remember to store it in query and not call it directly so we can chain more query commands to it..
+    this.query.find(JSON.parse(queryStr));    
+    
+    return this;
+  }
+
+  
+
+}
+
+
 exports.getAllTours = async (req, res) => {
   // console.log(req.query);
 
@@ -33,21 +67,25 @@ exports.getAllTours = async (req, res) => {
   // we want to remove certain query params that wont be used for filtering. but careful to
   // create a new object and not mutate the curent object
 
-  const excludeQueries = ['page', 'offset', 'limit', 'fields', 'sort'];
-  // copy the queries and save in params below
-  const params = { ...req.query };
-  // remnove keyworkds not meant for filtering
-  excludeQueries.forEach((query) => delete params[query]);
-  console.log(params);
-  let paramStr = JSON.stringify(params);
-  // convert advanced filtering keywords to recognized keywords with regex
-  paramStr = paramStr.replace(
-    /\b(gt|gte|lt|lte|in)\b/g,
-    (match) => `$${match}`
-  );
-  //1b. filter by using the mongoose find query method.
-  // remember to store it in query and not call it directly so we can chain more query commands to it..
-  let query = TourModel.find(JSON.parse(paramStr));
+  // const excludeQueries = ['page', 'offset', 'limit', 'fields', 'sort'];
+  // // copy the queries and save in params below
+  // const params = { ...req.query };
+  // // remnove keyworkds not meant for filtering
+  // excludeQueries.forEach((query) => delete params[query]);
+  // console.log(params);
+  // let paramStr = JSON.stringify(params);
+  // // convert advanced filtering keywords to recognized keywords with regex
+  // paramStr = paramStr.replace(
+  //   /\b(gt|gte|lt|lte|in)\b/g,
+  //   (match) => `$${match}`
+  // );
+  // //1b. filter by using the mongoose find query method.
+  // // remember to store it in query and not call it directly so we can chain more query commands to it..
+  // let query = TourModel.find(JSON.parse(paramStr));
+
+  const features = new APIFeatures(TourModel.find(), req.query);
+
+  features.filter();
 
   // 2. add sorting to it. add it conditionally if there is sorting in the request params
 
